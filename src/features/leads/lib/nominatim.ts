@@ -16,11 +16,14 @@ export interface SearchLeadsParams {
   city: string;
   state: string;
   neighborhood: string;
+  offset?: number;
 }
 
 export interface SearchLeadsResponse {
   results: LeadResult[];
   scanned: number;
+  nextOffset: number;
+  hasMore: boolean;
 }
 
 export async function searchLeads(params: SearchLeadsParams): Promise<SearchLeadsResponse> {
@@ -31,6 +34,7 @@ export async function searchLeads(params: SearchLeadsParams): Promise<SearchLead
   url.searchParams.set('city', params.city);
   if (params.state) url.searchParams.set('state', params.state);
   if (params.neighborhood) url.searchParams.set('neighborhood', params.neighborhood);
+  if (params.offset) url.searchParams.set('offset', String(params.offset));
 
   const response = await fetch(url.toString());
   if (!response.ok) {

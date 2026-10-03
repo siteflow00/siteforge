@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Search } from 'lucide-react';
+import { Plus, Search } from 'lucide-react';
 import { PageHeader } from '@/components/layout/page-header';
 import { EmptyState, ErrorState, LoadingState } from '@/components/feedback';
 import { Button, Card, CardBody, Field, Input, Select, useToast } from '@/components/ui';
@@ -8,13 +8,13 @@ import { fetchMyWorkspace } from '@/features/settings/api/account';
 import { createPlace } from '@/features/places/api/places';
 import { brazilianStates, niches } from '../components/niches';
 import { LeadResultCard } from '../components/lead-result-card';
-import { searchLeads, type LeadResult } from '../lib/nominatim';
+import { searchLeads, type LeadResult, type SearchLeadsParams } from '../lib/nominatim';
 
 type SearchState =
   | { status: 'idle' }
   | { status: 'loading' }
   | { status: 'error'; message: string }
-  | { status: 'done'; results: LeadResult[]; scanned: number };
+  | { status: 'done'; results: LeadResult[]; scanned: number; nextOffset: number; hasMore: boolean };
 
 export function LeadsPage() {
   const { user } = useAuth();
@@ -26,18 +26,57 @@ export function LeadsPage() {
   const [neighborhood, setNeighborhood] = useState('');
   const [search, setSearch] = useState<SearchState>({ status: 'idle' });
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
+  const [lastParams, setLastParams] = useState<SearchLeadsParams | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   async function runSearch() {
     if (!niche || !city) {
       toast({ title: 'Escolha ao menos o nicho e a cidade', variant: 'info' });
       return;
     }
+    const params: SearchLeadsParams = { niche, city, state, neighborhood };
+    setLastParams(params);
     setSearch({ status: 'loading' });
     try {
-      const { results, scanned } = await searchLeads({ niche, city, state, neighborhood });
-      setSearch({ status: 'done', results, scanned });
+      const { results, scanned, nextOffset, hasMore } = await searchLeads(params);
+      setSearch({ status: 'done', results, scanned, nextOffset, hasMore });
     } catch (error) {
       setSearch({ status: 'error', message: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
+  async function loadMore() {
+    if (search.status !== 'done' || !lastParams) return;
+    const current = search;
+    setLoadingMore(true);
+    try {
+      const page = await searchLeads({ ...lastParams, offset: current.nextOffset });
+      const known = new Set(current.results.map((lead) => lead.id));
+      const added = page.results.filter((lead) => !known.has(lead.id));
+      setSearch({
+        status: 'done',
+        results: [...current.results, ...added],
+        scanned: current.scanned + page.scanned,
+        nextOffset: page.nextOffset,
+        hasMore: page.hasMore,
+      });
+      if (added.length === 0) {
+        toast({
+          title: page.hasMore ? 'Nenhuma nova empresa nesse lote' : 'Fim da região',
+          description: page.hasMore
+            ? 'Clique de novo para analisar mais empresas.'
+            : 'Não há mais empresas para analisar nessa região.',
+          variant: 'info',
+        });
+      }
+    } catch (error) {
+      toast({
+        title: 'Não foi possível buscar mais',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'error',
+      });
+    } finally {
+      setLoadingMore(false);
     }
   }
 
@@ -156,6 +195,14 @@ export function LeadsPage() {
                   ? `Analisamos ${search.scanned} empresas e nenhuma tem telefone cadastrado sem já ter site. Tente outra cidade, bairro ou nicho.`
                   : 'Não encontramos empresas nessa região. Tente outra cidade ou nicho.'
               }
+              action={
+                search.hasMore ? (
+                  <Button variant="secondary" onClick={loadMore} loading={loadingMore}>
+                    <Plus className="h-4 w-4" aria-hidden />
+                    Continuar procurando
+                  </Button>
+                ) : undefined
+              }
             />
           </Card>
         )}
@@ -171,6 +218,18 @@ export function LeadsPage() {
                   onSave={() => handleSaveLead(lead)}
                 />
               ))}
+            </div>
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <p className="text-sm text-ink-muted">
+                {search.results.length} {search.results.length === 1 ? 'empresa encontrada' : 'empresas encontradas'} ·{' '}
+                {search.scanned} analisadas
+              </p>
+              {search.hasMore && (
+                <Button variant="secondary" size="sm" onClick={loadMore} loading={loadingMore}>
+                  <Plus className="h-4 w-4" aria-hidden />
+                  Buscar mais empresas
+                </Button>
+              )}
             </div>
             <p className="mt-4 text-xs text-ink-subtle">
               Dados de localização por{' '}
