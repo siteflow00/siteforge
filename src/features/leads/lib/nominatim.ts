@@ -6,6 +6,7 @@ export interface LeadResult {
   address: string;
   city: string | null;
   category: string | null;
+  phone: string;
   lat: number;
   lon: number;
 }
@@ -17,7 +18,12 @@ export interface SearchLeadsParams {
   neighborhood: string;
 }
 
-export async function searchLeads(params: SearchLeadsParams): Promise<LeadResult[]> {
+export interface SearchLeadsResponse {
+  results: LeadResult[];
+  scanned: number;
+}
+
+export async function searchLeads(params: SearchLeadsParams): Promise<SearchLeadsResponse> {
   if (!env.supabaseUrl) throw new Error('Supabase não está configurado.');
 
   const url = new URL(`${env.supabaseUrl}/functions/v1/search-leads`);
@@ -31,5 +37,5 @@ export async function searchLeads(params: SearchLeadsParams): Promise<LeadResult
     throw new Error('Não foi possível buscar empresas agora. Tente novamente em instantes.');
   }
 
-  return (await response.json()) as LeadResult[];
+  return (await response.json()) as SearchLeadsResponse;
 }

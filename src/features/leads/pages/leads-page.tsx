@@ -14,7 +14,7 @@ type SearchState =
   | { status: 'idle' }
   | { status: 'loading' }
   | { status: 'error'; message: string }
-  | { status: 'done'; results: LeadResult[] };
+  | { status: 'done'; results: LeadResult[]; scanned: number };
 
 export function LeadsPage() {
   const { user } = useAuth();
@@ -34,8 +34,8 @@ export function LeadsPage() {
     }
     setSearch({ status: 'loading' });
     try {
-      const results = await searchLeads({ niche, city, state, neighborhood });
-      setSearch({ status: 'done', results });
+      const { results, scanned } = await searchLeads({ niche, city, state, neighborhood });
+      setSearch({ status: 'done', results, scanned });
     } catch (error) {
       setSearch({ status: 'error', message: error instanceof Error ? error.message : String(error) });
     }
@@ -52,7 +52,7 @@ export function LeadsPage() {
       const workspace = await fetchMyWorkspace(user.id);
       await createPlace(workspace.workspaceId, user.id, {
         name: lead.name,
-        phone: '',
+        phone: lead.phone,
         city: lead.city ?? city,
         niche,
         hasWebsite: false,
@@ -138,7 +138,7 @@ export function LeadsPage() {
           </Card>
         )}
 
-        {search.status === 'loading' && <LoadingState label="Buscando empresas…" />}
+        {search.status === 'loading' && <LoadingState label="Buscando empresas e conferindo contatos…" />}
 
         {search.status === 'error' && (
           <Card>
@@ -150,8 +150,12 @@ export function LeadsPage() {
           <Card>
             <EmptyState
               icon={Search}
-              title="Nenhuma empresa encontrada"
-              description="Tente uma cidade ou um nicho diferente."
+              title="Nenhuma empresa com telefone e sem site"
+              description={
+                search.scanned > 0
+                  ? `Analisamos ${search.scanned} empresas e nenhuma tem telefone cadastrado sem já ter site. Tente outra cidade, bairro ou nicho.`
+                  : 'Não encontramos empresas nessa região. Tente outra cidade ou nicho.'
+              }
             />
           </Card>
         )}
@@ -178,7 +182,7 @@ export function LeadsPage() {
               >
                 colaboradores do OpenStreetMap
               </a>
-              . Telefone e site não são preenchidos automaticamente — adicione ao editar em Meus lugares.
+              . Mostramos só empresas com telefone cadastrado e sem site no mapa.
             </p>
           </>
         )}
